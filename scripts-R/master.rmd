@@ -324,21 +324,36 @@ On a first look, the data provides the following information.
 Thereby, date and time are less useful, as the time-format is transformed into double values that provide no information on a first look.
 
 
-```{r lorenzkurve_brandvsclicks , echo=FALSE, warning=FALSE}
+```{r lorenzkurve_clicksvspurchases , echo=FALSE, warning=FALSE}
+buffer1 <- click_df %>%
+  select(Product_ID,Session_ID) %>%
+  group_by( Product_ID) %>%
+  summarise(numberofclicks = n())
+
+buffer <- order_df %>%
+  select(Product_ID,Order_Line_Quantity)%>%
+  group_by(Product_ID)%>%
+  summarise(numberofpurchases = sum(Order_Line_Quantity))
+buffer <- filter(buffer,!is.na(numberofpurchases))
+
+product_clicks_purchases <- merge(buffer1,buffer,by="Product_ID",all = TRUE)
+product_clicks_purchases <- filter(product_clicks_purchases,!is.na(numberofclicks))
+product_clicks_purchases <- filter(product_clicks_purchases,!is.na(numberofpurchases))
+product_clicks_purchases <- filter(product_clicks_purchases,!is.na(Product_ID))
+
+totalclicks <- sum(product_clicks_purchases$numberofclicks)
+totalpurchases <- sum(product_clicks_purchases$numberofpurchases)
+
+product_clicks_purchases <- product_clicks_purchases %>%
+  select(Product_ID,numberofclicks,numberofpurchases) %>%
+  group_by(Product_ID)%>%
+  summarise(numberofclicks = numberofclicks,click_perc = numberofclicks/totalclicks,numberofpurchases = numberofpurchases, purchases_perc = numberofpurchases/totalpurchases)
+
 library(ineq)
-brand_vs_clicks <- click_df %>%
-  select(BrandName,Session_Visit_Count,Session_ID) %>%
-  group_by(BrandName) %>%
-  summarise(clicks=sum(Session_Visit_Count))
-totalclicks <- sum(brand_vs_clicks$clicks)
-brand_vs_clicks <- brand_vs_clicks %>%
-  select(BrandName,clicks) %>%
-  group_by(BrandName) %>%
-  summarise(clicks = clicks, click_pro = clicks/totalclicks)
 G <- rep(10,10)
 G_kum <- c(0,cumsum(G/100))
-G1 <- brand_vs_clicks$click_pro
-G1_kum <- c(0,cumsum(brand_vs_clicks$click_pro/100))
+G1 <- product_clicks_purchases$purchases_perc
+G1_kum <- c(0,cumsum(product_clicks_purchases$click_perc/100))
 D1 <- Lc(G1, n = rep(1,length(G1)), plot = FALSE)
 p <- D1[1]
 L <- D1[2]
@@ -353,11 +368,11 @@ p1 <- ggplot(data=D1_df) +
   geom_line(aes(x=p, y=L), stat = "identity", color="#990000") +
   geom_polygon(data = koordinaten, aes(x = xx, y = yy), fill = rgb(255,100,0,55,maxColorValue=255)) +
   annotate("text", x = 0.9, y = 0.1, label = paste("Gini =", gini), size=3, colour="gray30") +
-  geom_abline()
+  geom_abline()+
+  labs(y="Number of Purchases per Product",
+       x="Number of Clicks per Product",
+       title = "Product: Clicks vs. Purchases")
 p1
-
-#ggplot(brand_vs_clicks)+
-#  geom_point(mapping = aes(x=BrandName,y=click_pro))
 
 ```
 
