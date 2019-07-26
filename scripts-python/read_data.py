@@ -6,7 +6,7 @@ import pickle
 import datetime
 from absolute_data_paths import relative_to_absolute
 
-
+#%%
 def read_raw_data(filename, column_file, samplename, dataset_name):
     filename = "../00_raw_data/" + filename
     path_to_file = relative_to_absolute(filename)
@@ -151,3 +151,5 @@ def load_dataframe(filename):
 # "order.xlsx","order.pkl")
 # print(df[["DoYouPurchaseForOthers","SendEmail",
 # "ProductCode","New Bank Card"]])
+#%% load dataframe
+load_dataframe("clickstream_data.csv")

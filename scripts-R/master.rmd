@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 ---
 title: "Programming Data Science Report"
 author: "Group number 5: 7308029 Philipp Peter, 7357790 Laurenz Harnischmacher, 7309584 Nico Lindert"
@@ -538,3 +539,1235 @@ The table "Summary_Order" is based on `r nrow(ave_Order)` order observations. We
 ```
 
 # Conclusion
+=======
+---
+title: "Programming Data Science Report"
+author: "Group number 5: 7308029 Philipp Peter, 7357790 Laurenz Harnischmacher, 7309584 Nico Lindert"
+date: "24 Mai 2019"
+output: 
+  bookdown::html_document2:
+    toc: yes 
+    toc_float: true
+---
+```{r importLibs, include=FALSE}
+# load libraries
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(stringi)
+library(stringr)
+library(hms)
+library(knitr)
+library(naniar)
+library(scales)
+library(lubridate)
+library(maps)
+library(usmap)
+
+```
+
+
+```{r setknitr , include=FALSE}
+require("knitr")
+knitr::opts_chunk$set(error = TRUE)
+# Set root directory
+knitr::opts_knit$set(root.dir = "C:/Github/data")
+#Philipp root
+#knitr::opts_knit$set(root.dir = "C:\\Users\\Philipp\\Documents\\Meine Dokumente\\StudiumDocs\\Master\\2019 SS\\Programming Data Science\\data")
+#knitr::opts_knit$set(root.dir = "C:\\Users\\Philipp\\Documents\\StudDocs\\Master\\SS2019\\Programming Data Science\\data")
+#lh_root
+#knitr::opts_knit$set(root.dir = "C:\\Users\\Laure\\Documents\\git_Repositories\\phyk_data")
+
+```
+
+
+```{r movedatasets, echo=FALSE, warning=FALSE}
+# move datasets to raw_data
+require("knitr")
+rootDir <- knitr::opts_knit$get("root.dir")
+origin_clickstream <- paste(rootDir, "clickstream", sep="/")
+origin_experiment <- paste(rootDir,"experiment", sep="/")
+origin_orders <- paste(rootDir,"orders", sep="/")
+
+des_root <- paste(rootDir, "00_raw_data", sep="/")
+des_under <- paste(rootDir, "01_data_understanding", sep="/")
+# ------------------------------
+# define data paths
+headersPath <- paste(rootDir, "01_data_understanding/order_columns.txt", sep="/")
+headersPath2 <- paste(rootDir, "01_data_understanding/clickstream_columns.txt", sep="/")
+rdaPathOrder <- paste(rootDir, "00_raw_data/order.rda", sep="/")
+rdaPathClick <- paste(rootDir, "00_raw_data/click.rda", sep="/")
+```
+
+```{r loadrda, include=F}
+# -------- IF THIS IS POSSIBLE, ALL IMPORT AND CLEANSING STEPS CAN BE SKIPPED --------#
+didNotImport <- FALSE
+
+tryCatch(load(rdaPathClick),
+         error=function(e){
+           didNotImport <<- TRUE
+           print("konnte click nicht importieren")
+         })
+tryCatch(load(rdaPathOrder),
+         error=function(e){
+           didNotImport <<- TRUE
+           print("konnte order nicht importieren")
+         })
+```
+
+```{r filecopies, echo=F}
+if(didNotImport){ # only necessary, if rdas not available
+  # move datasets
+  # clickstream1
+  unzip(paste(origin_clickstream,"clickstream_data.zip",sep="/"),files="clickstream_data.csv",list = FALSE, exdir = des_root)
+  # clickstream2
+  file.copy(paste(origin_clickstream,"clickstream_data_part_2.csv",sep="/"),des_root)
+  # experiment 
+  file.copy(paste(origin_experiment,"experimental_results.csv", sep = "/"),des_root)
+  #order
+  file.copy(paste(origin_orders,"order_data.csv",sep = "/"),des_root)
+  
+  #move .txts
+  #clickstream_columns.txt
+  file.copy(paste(origin_clickstream,"clickstream_columns.txt", sep = "/"),des_under)
+  
+  #order_columns.txt
+  file.copy(paste(origin_orders,"order_columns.txt",sep = "/"),des_under)
+}
+```
+
+```{r furtherPrep, echo=FALSE}
+if (didNotImport){
+  # dataPath <- paste(rootDir, "02_data_preparation/order_data_clean.csv", sep="/")
+  # dataPath2 <- paste(rootDir, "02_data_preparation/click_data_clean.csv", sep="/")
+  
+  dataPath <- paste(rootDir, "00_raw_data/order_data.csv", sep="/")
+  dataPath2 <- paste(rootDir, "00_raw_data/clickstream_data.csv", sep="/")
+  dataPath3 <- paste(rootDir, "00_raw_data/clickstream_data_part_2.csv", sep="/")
+  
+  knitr::opts_chunk$set(echo = TRUE)
+}
+```
+
+
+# Introduction
+
+This course simulated a data science project. Within this course, a webshop's dataset from 2000 will be imported, cleaned, analysed and evaluated. <br>
+Along this report, several customer e-mails will be included and guide through the document. Generally, the process is separated into the following steps:<br>
+
+* [Data import & manipulation]
+* [Visualisation] using a grammar of graphics
+* [Summary tables]
+* [Comparison of groups] (treatment effect)
+* [Predictions] (bias, variance, complexity factor)
+
+
+## Scenario
+
+In times of big data and the importance of evaluating company's data to stay competible on a highly digitised market, data science provides powerful tools to handle these challenges.<br>
+Therefore, a fictive company called "ebuy" wanted us to analyse the data that their webshop produced. Two datasets about order details and clicksstreams were available and the first step was to produce "interesting numbers and images that are easy to understand". In a later request, a second clickstream file was uploaded and should be considered as well. <br>
+The following chapters [Data Import & Manipulation] and [Visualisation] will deal with answering these requests.
+
+
+## Data Import & Manipulation {#getdata}
+
+Before any visualisation or even analysis can take place, the data has to be imported, cleaned and prepared. The import included
+
+1. Extracting the zip-packages.
+1. Reading csv-files and transforming them to modifiable data frames.
+1. Merging the two clickstream files to one data frame.
+
+```{r dataImport, include=FALSE}
+if(didNotImport)
+{
+  # prepare column name list
+  headersFile = file(headersPath, "r")
+  headersFile2 = file(headersPath2, "r")
+  #headerNames <- list()
+  #http://r.789695.n4.nabble.com/How-to-read-plain-text-documents-into-a-vector-td901794.html
+  obj_list <- readLines(headersFile)
+  obj_list2 <- readLines(headersFile2)
+  
+  #To convert to a vector, do the following:
+  result <- stri_extract_first(obj_list, regex="[A-z ,]+")
+  result2 <- stri_extract_first(obj_list2, regex="[A-z ,]+")
+  dtype <- stri_extract_last(obj_list, regex="[A-z ,]+")
+  result <- gsub(" ", "_", result)
+  result2 <- gsub(" ", "_", result2)
+  
+  # initially
+  # order_df <- read_csv(dataPath, col_names = result, na=c("", "?", "NULL", "NA", "Nan"))
+  # click_df <- read_csv(dataPath2, col_names = result2, na=c("", "?", "NULL", "NA", "Nan"))
+  
+  # order_df <- read_csv(dataPath, na=c("", "?", "NULL", "NA", "Nan"))
+  # click_df <- read_csv(dataPath2, na=c("", "?", "NULL", "NA", "Nan"))
+  
+  order_df <- read_csv(dataPath, col_names = result, na=c("", "?", "NULL", "NA", "Nan"), guess_max = 3400)
+  # NL: Schafft Laptop nicht 
+  click_df <- read_csv(dataPath2, col_names = result2, na=c("", "?", "NULL", "NA", "Nan"), guess_max = 3400)
+  click_df2 <- read_csv(dataPath3, col_names = result2, na=c("", "?", "NULL", "NA", "Nan"), guess_max = 3400)
+  click_df <- rbind(click_df,click_df2)
+  
+  # Parse Order Time
+  order_df$Order_Time <- parse_time(order_df$"Order_Line_Date_Time","%H\\:%M\\:%S")
+  
+  
+  # Parse Click Time
+  click_df$Request_Date_Time <- paste(click_df$Request_Date,click_df2$Request_Date_Time)
+  click_df$Request_Date_Time <- parse_datetime(click_df$Request_Date_Time,format="%Y-%m-%d %H\\:%M\\:%S")
+}
+```
+
+
+```{r compare_dataimport_RPy, eval=FALSE, include=FALSE}
+
+rootDir <- knitr::opts_knit$get("root.dir")
+headersPath <- paste(rootDir, "01_data_understanding/order_columns.txt", sep="/")
+
+
+
+#clickstream dataset compare
+loc_click_r <- paste(rootDir, "00_raw_data/click_r.csv", sep="/")
+write.csv(click_df, file = loc_click_r, row.names =FALSE, na = "")
+
+# py csv
+py_df = read.csv(file = "../00_raw_data/clickstream_py.csv",na=c("", "?", "NULL", "NA", "Nan"), sep = ",",)
+
+# r csv
+r_df = read.csv(file = "../00_raw_data/click_r.csv",na=c("", "?", "NULL", "NA", "Nan"),sep = "," )
+
+#head(r_df)
+#head(py_df)
+# show difference between python and r dataset
+diff_r <-r_df[!(r_df%in%py_df)]
+head(diff_r)
+diff_p <-py_df[!(py_df%in%r_df)]
+head(diff_p)
+
+
+#order dataset compare 
+loc_order_r <- paste(rootDir, "00_raw_data/order_r.csv", sep="/")
+write.csv(order_df, file = loc_order_r, row.names =FALSE, na = "")
+
+# py csv
+py_df = read.csv(file = "../00_raw_data/order_py.csv",na=c("", "?", "NULL", "NA", "Nan"), sep = ",",)
+
+# r csv
+r_df = read.csv(file = "../00_raw_data/order_r.csv",na=c("", "?", "NULL", "NA", "Nan"),sep = "," )
+
+#head(r_df)
+#head(py_df)
+# show difference between python and r dataset
+diff_r <-r_df[!(r_df%in%py_df)]
+head(diff_r)
+diff_p <-py_df[!(py_df%in%r_df)]
+head(diff_p)
+
+
+```
+Getting to _data manipulation_, a few things within the datasets had to be fixed.
+
+
+
+# Analysis
+
+## Data Manipulation {#dataMan}
+
+Due to the huge size of the datasets, we will
+
+1. create a new set `relevant_df` with the 16 most relevant columns
+1. reduce the original set `order_df` by deleting all twin columns
+
+Besides, all semicolons within the cells were simply erased.
+
+```{r cleaningFunctions, echo=FALSE}
+cleanNas <- function(x){
+  df2 <- x %>% replace_with_na_all(condition = ~.x %in% c("?", "NULL"))
+  ## dataframe <- str_replace_all(dataframe, ";", ",")
+  return (df2)
+}
+dropEmptyRowsAndCols <- function(x){
+  return(x[rowSums(!is.na(x)) > 0,colSums(!is.na(x)) > 0])
+}
+
+dropcounter <- 0
+dropDuplicateCols <- function(x)
+{
+  drop <- vector()
+  k <- 1
+  for (i in 1:ncol(x)) {
+    col_i = colnames(x)[i]
+    for (j in i+1:ncol(x)){
+      col_j = colnames(x)[j]
+      if(identical(x[[col_i]],x[[col_j]])) {
+        # print(paste(col_i,col_j,sep=" = "))
+        drop[k] <- i
+        k <- k + 1
+        dropcounter <- dropcounter + 1
+      }
+    }
+  }
+  temp <- x[, !colnames(x) %in% drop]
+  return(temp)
+}
+deleteSemicolons <- function(x)
+{
+  return(gsub(";","",x))
+}
+deleteBackslashs <- function(x)
+{
+  return(gsub("\\\\","",x,fixed=TRUE))
+}
+dropColumnsPercNA <- function(x, percentage)
+{
+  lengthX <- length(x[[1]])
+  k <- 0
+  drop <- vector()
+  for (i in 1:ncol(x))
+  {
+    col_i <- colnames(x)[i]
+    if(((lengthX - sum(is.na(x[col_i]))) / lengthX) < percentage)
+    {
+      drop[k] <- col_i
+      k <- k+1
+    }
+  }
+  temp <- x[, !colnames(x) %in% drop]
+  return(temp)
+}
+```
+
+```{r dataCleanorder, echo=FALSE}
+# Clean order_df
+# Selected Column Indices
+sel <- c("Order_Session_ID","Order_Date","Order_Time","Order_ID","Order_Status","Order_Amount","HowDidYouHearAboutUs","City","US_State","Year_of_Birth","Customer_ID","Estimated_Income_Code","Gender","Order_Credit_Card_Brand","BrandName","Product_Object_ID","Assortment_ID")
+sel2 <- c("Session_ID","Request_Sequence","Request_Processing_Time","Request_Query_String","Request_Referrer","Request_Date","Request_Date_Time","Request_Assortment_ID","Request_Subassortment_ID","Request_Template","REQUEST_DAY_OF_WEEK","Product_ID")
+
+or <- select(order_df,sel)
+cl <- select(click_df, sel2)
+
+# Get rid of semicolons
+or$Estimated_Income_Code <- gsub(";", "", or$Estimated_Income_Code)
+
+#write.csv(or, "order_data_clean.csv")
+#write.csv(cl, "click_data_clean.csv")
+```
+
+
+```{r dataCleaningOrder, echo=FALSE}
+#if(didNotImport)
+#{
+  order_df <- order_df %>% 
+    cleanNas() %>%
+    dropEmptyRowsAndCols() %>%
+    dropDuplicateCols()
+  dropcount_order <- dropcounter
+
+  order_df$Estimated_Income_Code <- deleteSemicolons(order_df$Estimated_Income_Code)
+  
+  time_list = c(
+    order_df$Order_Date_Time,
+    order_df$Promotion_Object_Modification_Date_Time,
+    order_df$Last_Retail_Date_Time,
+    order_df$Verification_Date_Time,
+    order_df$Last_Update_Date_Time,
+    order_df$Order_Line_Date_Time,
+    order_df$Account_Creation_Date_Time,
+    order_df$Product_Creation_Date_Time,
+    order_df$Assortment_Creation_Date_Time,
+    click_df$Content_Creation_Date_Time,
+    click_df$Product_Creation_Date_Time,
+    click_df$Content_Modification_Date_Time,
+    click_df$Product_Modification_Date_Time,
+    click_df$Assortment_Creation_Date_Time,
+    click_df$Cookie_First_Visit_Date_Time,
+    click_df$Assortment_Modification_Date_Time,
+    click_df$Session_First_Request_Date_Time
+    )
+  
+  for (time in time_list) time <- deleteBackslashs(time)
+#}
+```
+
+
+
+```{r dataCleanclick, echo=FALSE}
+if(didNotImport)
+{
+  # Clean click_df
+  click_df <- click_df %>% 
+    dropEmptyRowsAndCols() %>%
+    dropDuplicateCols
+  dropcount_click <- dropcounter
+  
+  click_df$LeadsToBuy <- click_df$Request_Template == "checkout/thankyou\\.jhtml"
+}
+```
+
+1. Empty cells had several different values, e.g. `?` or `NULL`. All of these were changed to R-modifiable `NA` values.
+1. Empty rows/observations and columns/features were dropped.
+1. Duplicate features were dropped as well. This affected `r dropcount_order` columns in the order dataset and `r dropcount_click` columns in the clickstream dataset.
+1. Column names included spaces that became problematic in later analysis. They were simply replaced by underscores.
+1. All semicolons within cells were simply erased.
+1. Besides, backslashes within cells were erased as well.
+
+In order to be able to work and process faster, the cleaned and manipulated datasets were saved to files in R data format (RDAs). If cleaning is done once, all steps above can be skipped and it can directly be headed forward to the data insights and analysis.
+
+```{r exportDataframes, echo=FALSE}
+# ---------- This step enables faster knitting and progress after cleaning is done once. --------- #
+if(didNotImport)
+{
+  save(click_df, file = rdaPathClick)
+  save(order_df, file = rdaPathOrder)
+}
+```
+
+
+## Visualisation
+
+On a first look, the data provides the following information:
+
+```{r summary_or, echo=FALSE}
+# --- Features --- #
+or$Order_Week <- as.Date(cut(or$Order_Date,
+  breaks = "week",
+  start.on.monday = TRUE))
+or$Daypart <- cut(hour(hms(or$Order_Time)), c(0,6,12,18,Inf), c("Overnight (0-6AM)", "Morning (6-12AM)", "Afternoon (12AM-6PM)", "Prime (6PM-0AM)"))
+
+# --- Graphs --- #
+g <- ggplot(or, aes(Order_Date)) + geom_bar(aes(fill = Daypart)) + labs(x = "Order Date", y = "Number of Orders")
+plot(g)
+
+# --- Counters --- #
+count_1 <- count(or, Order_Date == "2000-03-01")[2,2]
+count_2 <- count(or, Order_Week == "2000-02-28")[2,2]
+temp <- count_2 / count(or)
+count_2_p <- percent(temp[1,1])
+```
+
+What can be observed is that most of the orders were placed at March 1, namely `r count_1`. `r count_2` or `r count_2_p` of all orders have been placed in the week of February 28.<br>
+Further, interestingly the amount of orders of March 1 placed overnight or in the morning is quite high. It could be assumed that there was a special time limited offer in the early hours of March 1.<br><br>
+Overall, only `r count(or, or$Gender)[3,2]` customers specified their gender as "male" and `r count(or, or$Gender)[2,2]` as "female". However, men seem to spend more money on average as the boxplot indicates.
+
+
+```{r grammarofg, echo=FALSE}
+#x = as.POSIXct(paste(or$Order_Date, or$Order_Time), format="%Y-%m-%d %H:%M:%S")
+
+# ggplot(or) +
+#   geom_point(mapping = aes(x = Order_Time, y = Order_Amount, color = Gender))
+
+or$Estimated_Income_Code <- factor(or$Estimated_Income_Code, levels = c(
+  "Under $15000", "$15000-$19999", "$20000-$29999", "$30000-$39999", "$40000-$49999",
+  "$50000-$74999", "$75000-$99999", "$100000-$124999", "$125000 OR MORE"
+))
+
+
+
+boxplot(Order_Amount~Gender, data = order_df, horizontal = TRUE, xlab = "Order Amount", ylab = "Gender")
+#boxplot(Order_Amount~Estimated_Income_Code, data = order_df, par(mar = c(12, 5, 4, 2)+ 0.1), las = 2)
+
+```
+
+
+Of course, this graph can be misleading, assuming that the male customer spending more than $500 skews the distribution but the information is nice anyways.<br>
+Another valuable information is the location of the customer.
+
+
+```{r heatmap, echo=FALSE}
+# 260719
+order_map <- select(order_df, "US_State")
+order_map$count <- 1
+order_map <- aggregate(order_map$count, by = list(order_map$US_State), FUN = sum)
+order_map$state <- order_map$Group.1
+
+plot_usmap(data = order_map, values = "x", lines = "black") +
+  scale_fill_continuous(name = "Number of Orders", label = scales::comma) + 
+  theme(legend.position = "right")
+
+```
+
+Most of the customers are located in California (`r order_map$x[5]`) and New York (`r order_map$x[35]`).<br><br>
+Yet, all insights refer to the order dataset. The clickstream dataset provides a lot more data but not necessarily more interesting insights. As the name implicates, it carries information about where the customer clicked on the website. 
+
+
+```{r summary_cl, echo=FALSE}
+# --- Features --- #
+cl$Request_Week <- as.Date(cut(cl$Request_Date,
+  breaks = "week",
+  start.on.monday = TRUE))
+cl$Daypart <- cut(hour(ymd_hms(cl$Request_Date_Time)), c(0,6,12,18,Inf), c("Overnight (0-6AM)", "Morning (6-12AM)", "Afternoon (12AM-6PM)", "Prime (6PM-0AM)"))
+
+# --- Graphs --- #
+g <- ggplot(cl, aes(Request_Date)) + geom_bar(aes(fill = Daypart)) + labs(x = "Request Date", y = "Number of Requests")
+plot(g)
+
+# --- Counters --- #
+count_3 <- count(cl, Request_Date == "2000-04-27")[2,2]
+# count_2 <- count(cl, Request_Week == "2000-02-28")[2,2]
+# temp <- count_2 / count(or)
+# count_2_p <- percent(temp[1,1])
+```
+
+What can be observed is, that there is one day, April 27, with far more than average requests (`r count_3`). The amount of requests in the morning is far above average on this day.
+
+```{r firstLook , echo=FALSE}
+
+
+knitr::knit_exit()
+```
+Thereby, date and time are less useful, as the time-format is transformed into double values that provide no information on a first look.
+
+
+```{r lorenzkurve_brandvsclicks}
+library(ineq)
+brand_vs_clicks <- click_df %>%
+  select(BrandName,Session_Visit_Count,Session_ID) %>%
+  group_by(BrandName) %>%
+  summarise(clicks=sum(Session_Visit_Count))
+totalclicks <- sum(brand_vs_clicks$clicks)
+brand_vs_clicks <- brand_vs_clicks %>%
+  select(BrandName,clicks) %>%
+  group_by(BrandName) %>%
+  summarise(clicks = clicks, click_pro = clicks/totalclicks)
+G <- rep(10,10)
+G_kum <- c(0,cumsum(G/100))
+G1 <- brand_vs_clicks$click_pro
+G1_kum <- c(0,cumsum(brand_vs_clicks$click_pro/100))
+D1 <- Lc(G1, n = rep(1,length(G1)), plot = FALSE)
+p <- D1[1]
+L <- D1[2]
+D1_df <- data.frame(p,L)
+xx <- c(G_kum,rev(G_kum))
+yy <- c(G1_kum,rev(G_kum))
+koordinaten <- as.data.frame(xx)
+koordinaten$yy <- yy[1:22]
+gini <- round(ineq(G1) * 100, digits = 1)
+p1 <- ggplot(data=D1_df) +
+  geom_point(aes(x=p, y=L)) +
+  geom_line(aes(x=p, y=L), stat = "identity", color="#990000") +
+  geom_polygon(data = koordinaten, aes(x = xx, y = yy), fill = rgb(255,100,0,55,maxColorValue=255)) +
+  annotate("text", x = 0.9, y = 0.1, label = paste("Gini =", gini), size=3, colour="gray30") +
+  geom_abline()
+p1
+
+#ggplot(brand_vs_clicks)+
+#  geom_point(mapping = aes(x=BrandName,y=click_pro))
+
+```
+
+
+# Analysis
+
+## Summary tables
+
+### Clickstream tables
+
+```{r Clickstreamtables , echo=FALSE}
+buffer<- click_df %>%
+  select(Session_ID,Request_Query_String,Request_Referrer,Request_Assortment_ID,Request_Subassortment_ID,Request_Template,REQUEST_DAY_OF_WEEK,
+         Product_ID)%>%
+  group_by(Session_ID)
+
+buffer$Request_Referrer<- str_split(buffer$Request_Referrer,"/")
+
+buffer$Request_Referrer <- sapply(buffer$Request_Referrer,grep,pattern="www",value=TRUE,invert=FALSE)
+
+buffer$Request_Referrer<- replace_na(buffer$Request_Referrer)
+
+buffer$Request_Referrer <- as.character(buffer$Request_Referrer)
+
+buffer <- buffer %>%
+  select(Request_Referrer,Session_ID) %>%
+  group_by(Request_Referrer) %>%
+  summarise(Number_of_Referrers = n())
+
+buffer <- filter(buffer,Request_Referrer != "NA")
+
+buffer <-buffer[order(-buffer$Number_of_Referrers),]
+
+Session_top5 <- buffer[1:5,1:2]
+
+buffer<- click_df %>%
+  select(Session_ID,Product,Product_ID) %>%
+  group_by(Product)%>%
+  summarise(Click_on_Product = n())
+
+buffer <- filter(buffer,!is.na(Product))
+buffer <-buffer[order(-buffer$Click_on_Product),]
+
+Session_top5[1:5,3:4] <- buffer[1:5,1:2]
+
+
+buffer <- click_df %>%
+  select(Session_ID,REQUEST_HOUR_OF_DAY) %>%
+  group_by(REQUEST_HOUR_OF_DAY) %>%
+  summarise(Clicks_per_hours = n())
+
+buffer <-buffer[order(-buffer$Clicks_per_hours),]
+
+
+Session_top5[1:5,5:6] <- buffer[1:5,1:2]
+
+
+buffer <- click_df %>%
+  select(Session_ID,REQUEST_DAY_OF_WEEK) %>%
+  group_by(REQUEST_DAY_OF_WEEK) %>%
+  summarise(Clicks_per_day = n())
+
+buffer <-buffer[order(-buffer$Clicks_per_day),]
+
+Session_top5[1:5,7:8] <- buffer[1:5,1:2]
+
+names(Session_top5)<- c("Referrer","Number_of_Referres","Product","Clicks_on_Product",
+                      "Top_Click_Hours","Clicks_per_Hour","Top_Click_Days","Clicks_per_Day")
+
+Session_top5 <-as.data.frame(t(Session_top5))
+names(Session_top5)<- c("Top1","Top2","Top3","Top4","Top5")
+
+
+kable(Session_top5)
+```
+
+In the `click_df` we united the first clickstream dataset and the secound clickstream dataset. Together the `click_df` contains `r nrow(click_df)` click observations. We identifyed the top five from the `click_df` which are show above.
+
+
+
+```{r Sessiontable, echo=FALSE, warning=FALSE}
+
+ave_Session_df <- click_df %>%
+  select(Session_ID,Request_Sequence,Request_Processing_Time,Request_Query_String,Request_Referrer,Request_Date,Request_Date_Time,
+         Request_Assortment_ID,Request_Subassortment_ID,Request_Template,REQUEST_DAY_OF_WEEK,LeadsToBuy,Session_First_Request_Day_of_Week,
+         Product_ID,Session_First_Request_Hour_of_Day,Session_User_Agent)%>%
+  group_by(Session_ID)%>%
+  summarise(Request_count = max(Request_Sequence),
+            Session_duration_mins = difftime(max(Request_Date_Time),min(Request_Date_Time),units = c("mins")),
+            Visited_assortments = length(unique(Request_Assortment_ID)),
+            Referrer=last(Request_Referrer),
+            Session_day=first(REQUEST_DAY_OF_WEEK),
+            Visited_products =length(unique(Product_ID)),
+            LeadsToBuy = sum(LeadsToBuy) > 0,
+            Session_day_2 = first(Session_First_Request_Day_of_Week),
+            Session_hour = first(Session_First_Request_Hour_of_Day),
+            Visited_Products_List = paste(Product_ID, collapse = ",")
+            )
+  
+ave_Session_df$Session_duration_mins <- as.numeric(ave_Session_df$Session_duration_mins)
+
+# inserted Referrer for ML
+ave_Session_df$Referrer <- sapply(ave_Session_df$Referrer,str_extract,pattern="[[:alpha:]]+\\\\\\.([[:alnum:]]+)\\\\\\.[[:alnum:]]+")
+
+ave_Session_df$Referrer<- replace_na(ave_Session_df$Referrer, "none")
+
+ave_Session_df$Referrer <- as.factor(ave_Session_df$Referrer)
+
+df <- data.frame(W=ave_Session_df$Request_count,X=ave_Session_df$Session_duration_mins, Y=ave_Session_df$Visited_assortments, Z=ave_Session_df$Visited_products) # fake data
+summary_stats <- df %>% # start with data frame, and then ...
+  summarize_at(
+    .vars = c("W","X", "Y", "Z"), # select variables that should be in the table
+    .funs = funs(min, max, mean, median, sd) # which summary statistics do you want?
+  ) %>% 
+  gather(key, value) %>% # transpose everything, and then ...
+  separate(col=key, sep="_", c("summary_stats", "stat")) %>% # make two columns out of var name
+  spread(key=stat, value=value) # reapeated obs into multiple columns
+
+summary_stats$summary_stats <- c("Request_count","Session_duration_mins","Visited_assortments","Visited_products")
+
+kable(summary_stats) 
+```
+
+From the `click_df` dataset we extractet the `ave_Session_df`dataset.
+This dataset contains `r nrow(ave_Session_df)`  session observations.
+The tabel above summarizes  the average session. 
+
+### Order tables
+
+```{r Ordertables, echo=FALSE}
+
+buffer_order <- order_df %>%
+  select(Order_ID,Order_Line_ID,Order_Line_Quantity,Product_ID,Order_Date_Time,Order_Promotion_Code,
+         Order_Discount_Amount,Order_Line_Unit_List_Price,Order_Line_Unit_Sale_Price,Order_Amount,
+         Order_Customer_ID,Product,Order_Credit_Card_Payment_Amount,BrandName,Order_Hour_of_Day,Order_Day_of_Week) %>%
+  group_by(Order_ID)
+
+buffer <- buffer_order %>%
+  select(Order_ID,Product_ID,Product,Order_Line_Quantity) %>%
+  group_by(Product_ID) %>%
+  summarise(Order_ID = n(),
+            Product = last(Product),
+            Product_Quantity=sum(Order_Line_Quantity))
+buffer <- filter(buffer,!is.na(Product_ID))
+buffer <- buffer[order(-buffer$Product_Quantity),]
+
+Order_top5 <- buffer[1:5,1]
+Order_top5[1:5,2:2] <- buffer[1:5,4] 
+
+buffer <- filter(buffer,!is.na(Product))
+Order_top5[1:5,3:4] <- buffer[1:5,3:4] 
+
+buffer <- buffer_order %>%
+  select(Order_Customer_ID,Order_ID,Order_Line_Quantity)%>%
+  group_by(Order_Customer_ID)%>%
+  summarise(total_orders = n(),Products_Ordered=sum(Order_Line_Quantity))
+buffer <- buffer[order(-buffer$total_orders),]
+Order_top5[1:5,5:6] <- buffer[1:5,1:2] 
+
+buffer <- buffer[order(-buffer$Products_Ordered),]
+Order_top5[1:5,7:7] <- buffer[1:5,1] 
+Order_top5[1:5,8:8] <- buffer[1:5,3] 
+
+buffer <- buffer_order %>%
+  select(Product_ID,Order_ID,BrandName,Order_Line_Quantity) %>%
+  group_by(BrandName) %>%
+  summarise(Order_ID = n(),
+            Product_Quantity=sum(Order_Line_Quantity))
+buffer <- filter(buffer,!is.na(BrandName))
+buffer <- buffer[order(-buffer$Product_Quantity),]
+Order_top5[1:5,9:9] <- buffer[1:5,1] 
+Order_top5[1:5,10:10] <- buffer[1:5,3] 
+
+buffer <- buffer_order %>%
+  select(Order_ID,Order_Line_Quantity,Order_Hour_of_Day)%>%
+  group_by(Order_Hour_of_Day)%>%
+  summarise(Orders = n())
+buffer <- buffer[order(-buffer$Orders),]
+Order_top5[1:5,11:12] <- buffer[1:5,1:2]
+
+buffer <- buffer_order %>%
+  select(Order_ID,Order_Line_Quantity,Order_Day_of_Week)%>%
+  group_by(Order_Day_of_Week)%>%
+  summarise(Orders = n())
+buffer <- buffer[order(-buffer$Orders),]
+Order_top5[1:5,13:14] <- buffer[1:5,1:2]
+
+names(Order_top5)<- c("Product_ID","Orders_per_Product_ID","Product_Name","Orders_per_Product_Name",
+                      "Customer_ID","Orders_per_Customer","Customer__ID","Purchased_Products_per_Customer",
+                      "Brand","Orders_per_Brand","Top_Sale_Hours","Orders_per_Hours",
+                      "Top_Sale_Days","Orders_per_Day")
+
+Order_top5 <-as.data.frame(t(Order_top5))
+names(Order_top5)<- c("Top1","Top2","Top3","Top4","Top5")
+
+
+kable(Order_top5)
+
+```
+
+
+```{r ReturnSummary, echo=FALSE, warning=FALSE}
+
+# create return average table
+buffer <- filter(order_df,Order_Line_Quantity<0)
+ave_Return <- buffer %>%
+  select(Order_ID,Order_Line_ID,Order_Line_Quantity,Product_ID,Order_Date_Time,Order_Promotion_Code,Order_Discount_Amount,Order_Line_Unit_List_Price,Order_Line_Unit_Sale_Price,Order_Amount) %>%
+  group_by(Order_ID) %>%
+  summarise(Order_Line_count = n(),
+            Order_Quantity = sum(Order_Line_Quantity)*-1,
+            Purchased_Products = length(unique(Product_ID)),
+            Used_Promotions = ifelse(is.na(unique(Order_Promotion_Code)),0,1),
+            Used_Promotion = unique(Order_Promotion_Code),
+            Discount_Amount = max(Order_Discount_Amount),
+            Discount_from_Sale_Price = sum(sum(Order_Line_Unit_List_Price*Order_Line_Quantity)-sum(Order_Line_Unit_Sale_Price*Order_Line_Quantity))*-1,
+            Order_Amount = max(Order_Amount))
+df <- data.frame(U=ave_Return$Order_Quantity ,V=ave_Return$Purchased_Products,W=ave_Return$Used_Promotions,
+                 X=ave_Return$Discount_Amount, Y=ave_Return$Discount_from_Sale_Price, Z=ave_Return$Order_Amount) # fake data
+summary_Return <- df %>% # start with data frame, and then ...
+  summarize_at(
+    .vars = c("U","V","W","X", "Y", "Z"), # select variables that should be in the table
+    .funs = funs(min, max, mean, median, sd) # which summary statistics do you want?
+  ) %>% 
+  gather(key, value) %>% # transpose everything, and then ...
+  separate(col=key, sep="_", c("summary_Return", "stat")) %>% # make two columns out of var name
+  spread(key=stat, value=value) # reapeated obs into multiple columns
+
+summary_Return$summary_Return <- c("Return_Quantity","Returned_Products","Used_Promotions",
+                                   "Discount_Amount","Discount_from_Sale_Price","Return_Amount")
+
+kable(summary_Return) 
+
+
+```
+
+The table "Summary_Return" is based on `r nrow(ave_Return)` return observations. We extracted these return from the order dataset.
+
+
+```{r OrderSummary, echo=FALSE, warning=FALSE}
+
+# create order average table
+buffer <- filter(order_df,Order_Line_Quantity>0)
+ave_Order <- buffer %>%
+  select(Order_ID,Order_Line_ID,Order_Line_Quantity,Product_ID,Order_Date_Time,Order_Promotion_Code,Order_Discount_Amount,Order_Line_Unit_List_Price,Order_Line_Unit_Sale_Price,Order_Amount,Order_Credit_Card_Payment_Amount) %>%
+  group_by(Order_ID) %>%
+  summarise(Order_Line_count = n(),
+            Order_Quantity = sum(Order_Line_Quantity),
+            Purchased_Products = length(unique(Product_ID)),
+            Used_Promotions = ifelse(is.na(unique(Order_Promotion_Code)),0,1),
+            Used_Promotion = unique(Order_Promotion_Code),
+            Discount_Amount = max(Order_Discount_Amount),
+            Discount_from_Sale_Price = sum(sum(Order_Line_Unit_List_Price*Order_Line_Quantity)-sum(Order_Line_Unit_Sale_Price*Order_Line_Quantity)),
+            Order_Amount = max(Order_Amount),
+            Creditcard_Payment_Amount = max(Order_Credit_Card_Payment_Amount))
+df <- data.frame(U=ave_Order$Order_Quantity ,V=ave_Order$Purchased_Products,W=ave_Order$Used_Promotions,
+                 X=ave_Order$Discount_Amount, Y=ave_Order$Discount_from_Sale_Price, Z=ave_Order$Order_Amount,
+                 ZA=ave_Order$Creditcard_Payment_Amount) 
+df$X <- replace(df$X,is.na(df$X),0)
+df$ZA <- replace(df$ZA,is.na(df$ZA),0)
+summary_Order <- df %>% # start with data frame, and then ...
+  summarize_at(
+    .vars = c("U","V","W","X", "Y", "Z","ZA"), # select variables that should be in the table
+    .funs = funs(min, max, mean, median, sd) # which summary statistics do you want?
+  ) %>% 
+  gather(key, value) %>% # transpose everything, and then ...
+  separate(col=key, sep="_", c("summary_Order", "stat")) %>% # make two columns out of var name
+  spread(key=stat, value=value) # reapeated obs into multiple columns
+
+summary_Order$summary_Order <- c("Order_Quantity","Purchased_Products","Used_Promotions",
+                                   "Discount_Amount","Discount_from_Sale_Price","Order_Amount",
+                                 "Creditcard_Payment_Amount")
+kable(summary_Order) 
+
+
+```
+
+The table "Summary_Order" is based on `r nrow(ave_Order)` order observations. We extracted these orders from the order dataset.The negative minimum in the row b Order Amountb  looks suspicious. Research in the data revealed that the orders: order-Id 12314 and order-Id 10930 used a special combination of products and the promotion code b FRIENDb  to generate a negative order amount.  However, the credit card payment amount indicates that the coups didnb t succeed.  Also the datasets cannot tell if the negative Order Amount were create willingly or through accident. 
+
+
+
+The table below showes the average ordering customer.
+```{r ave_customer}
+buffer <- order_df %>%
+  select(Customer_ID,
+         Age,Year_of_Birth,Gender,Estimated_Income_Code,Marital_Status,Presence_Of_Children,City,US_State,Country) %>%
+  group_by(Customer_ID) %>%
+  summarise_all(funs(last(.)))
+
+buffer$Age <- 2019 -buffer$Year_of_Birth
+
+
+#age
+
+buffer1 <- buffer %>%
+  select(Age)%>%
+  group_by(Age)%>%
+  summarise(numberof = n())
+
+buffer1 <- filter(buffer1,!is.na(Age))
+
+buffer1 <- buffer1[order(-buffer1$numberof),]
+
+ave_customer <- buffer1[1:1,1:1]
+
+# gender
+buffer1 <- buffer %>%
+  select(Gender)%>%
+  group_by(Gender)%>%
+  summarise(numberof = n())
+
+buffer1 <- filter(buffer1,!is.na(Gender))
+
+buffer1 <- buffer1[order(-buffer1$numberof),]
+
+ave_customer[1:1,2:2] <- buffer1[1:1,1:1]
+
+# relation status
+
+buffer1 <- buffer %>%
+  select(Marital_Status)%>%
+  group_by(Marital_Status)%>%
+  summarise(numberof = n())
+
+buffer1 <- filter(buffer1,!is.na(Marital_Status))
+
+buffer1 <- buffer1[order(-buffer1$numberof),]
+
+ave_customer[1:1,3:3] <- buffer1[1:1,1:1]
+
+# children 
+
+buffer1 <- buffer %>%
+  select(Presence_Of_Children)%>%
+  group_by(Presence_Of_Children)%>%
+  summarise(numberof = n())
+
+buffer1 <- filter(buffer1,!is.na(Presence_Of_Children))
+
+buffer1 <- buffer1[order(-buffer1$numberof),]
+
+ave_customer[1:1,4:4] <- buffer1[1:1,1:1]
+
+# Estimated Income
+
+buffer1 <- buffer %>%
+  select(Estimated_Income_Code)%>%
+  group_by(Estimated_Income_Code)%>%
+  summarise(numberof = n())
+
+buffer1 <- filter(buffer1,!is.na(Estimated_Income_Code))
+
+buffer1 <- buffer1[order(-buffer1$numberof),]
+
+ave_customer[1:1,5:5] <- buffer1[1:1,1:1]
+
+
+# City
+
+buffer1 <- buffer %>%
+  select(City)%>%
+  group_by(City)%>%
+  summarise(numberof = n())
+
+buffer1 <- filter(buffer1,!is.na(City))
+
+buffer1 <- buffer1[order(-buffer1$numberof),]
+
+ave_customer[1:1,6:6] <- buffer1[1:1,1:1]
+
+
+# State
+
+buffer1 <- buffer %>%
+  select(US_State)%>%
+  group_by(US_State)%>%
+  summarise(numberof = n())
+
+buffer1 <- filter(buffer1,!is.na(US_State))
+
+buffer1 <- buffer1[order(-buffer1$numberof),]
+
+ave_customer[1:1,7:7] <- buffer1[2:2,1:1]
+
+ave_customer <- t(ave_customer)
+
+
+kable(ave_customer)
+```
+
+
+
+
+## Comparison of groups
+
+```{r compare}
+
+```
+
+<<<<<<< HEAD
+
+## Experiment: Recommender Systems
+
+For the websites recommender systems, there are different options. In an experiment, three different recommender systems were tested. First a random recommendation system as baseline comparison for the experiment, second a ranking based recommender system and third a profit oriented recommender system. The data consisted of 146 observations for the profit oriented system, 149 for the random one and 154 observations for the ranking based system.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=5, fig.width=11}
+rootDir <- knitr::opts_knit$get("root.dir")
+headersPath <- paste(rootDir, "experiment/experimental_results.csv", sep="/")
+experiment <- read_csv(headersPath)
+# plot data
+library(reshape2)
+plotData <- subset(experiment, select=c("random_recommendations","ranking_based","profit_oriented"))
+plotData <- melt(plotData)
+ggplot(plotData) %>%
+  + geom_density(aes(x=value, color = variable),adjust=.8) %>%
+  + scale_colour_manual(name="Recommender System", labels=c("Random", "Ranking Based", "Profit Oriented"), values=c("red","green","blue")) %>%
+  + labs(x = element_text("Average Sales per Person"),       # Change x axis title only
+         y = element_text("Density of Occurance")       # Change y axis title only
+         )
+```
+As can be seen in {FIGURE}, with some smoothing the profit oriented recommender system seems to be much more effective, offering both a higher mean value and a lower standard deviation. To proove this point, the t-tests are calculated for the combinations of both systems on the random recommender system and between the ranking and profit oriented recommender system.
+
+```{r echo=FALSE}
+profExp <- t.test(experiment$profit_oriented, experiment$random_recommendations, alternative="greater", paired=TRUE)
+rkgExp <- t.test(experiment$ranking_based, experiment$random_recommendations, alternative="greater", paired=TRUE)
+profRkg <- t.test(experiment$profit_oriented, experiment$ranking_based, alternative = "greater", paired=TRUE)
+# Build Table with values
+```
+
+The t-test shows that the profit oriented recommender system is indeed significantly better than the random recommendation system, with a p value of {variable}. Furthermore, it performs also significantly better than the ranking based recommender system, making it the best of the three. Our conclusion is that the best system to use is the profit oriented recommender system, because it is able to outperform the other candidate statistically significant.
+
+
+=======
+>>>>>>> 043a2461f48a7329e3a5ae111acd81fcdfc9b3af
+## Predictions
+
+```{r predictionDataset}
+
+knitr::knit_exit()
+library(rpart)
+library(caTools)
+library(rpart.plot)
+require(tree)
+library(party)
+library(class)
+library(rpart.utils)
+library(e1071)
+library(caret)
+
+# Columns for session click prediction
+# RequestReferrer / RequestTemplate , RequestDayOfWeek, RequestHourOfDay, Session User AGent, , SessionFirstRequestHourOfDay, SessionFirstDayOfWeek
+temp <- filter(ave_Session_df, Request_count > 1)
+temp <- subset(temp, select=c(Session_duration_mins,Session_day, Session_hour, Referrer, LeadsToBuy))
+
+temp$Session_day <- factor(temp$Session_day, levels = c("Monday", "Tuesday", "Wednesday", 
+                                                        "Thursday", "Friday", "Saturday", "Sunday"),
+                           ordered = TRUE)
+temp$Session_day <- as.integer(temp$Session_day)
+temp$Referrer <- as.integer(as.factor(temp$Referrer))
+
+```
+
+```{r predictionPreprocess}
+library(doParallel)
+# Partition the data in a 80%/20% split
+set.seed(1805)
+temp$LeadsToBuy <- factor(temp$LeadsToBuy, labels=c("No", "Yes"))
+trainIndex <- createDataPartition(temp$LeadsToBuy, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train <- temp[trainIndex,]
+test <- temp[-trainIndex,]
+
+# Scale the data
+set.seed(1343)
+preProc <- preProcess(train, method=c("center","scale"))
+train.scaled <- predict(preProc, train)
+test.scaled <- predict(preProc, test)
+
+# Sample the data, renames target to Class
+train.scaled$LeadsToBuy <- as.factor(train.scaled$LeadsToBuy)
+set.seed(1811)
+down_train <- downSample(x = train.scaled[, -ncol(train.scaled)],
+                         y = train.scaled$LeadsToBuy)
+
+up_train <- upSample(x = train.scaled[, -ncol(train.scaled)],
+                     y = train.scaled$LeadsToBuy)                         
+
+# Set up repetition for evaluation
+fitControl <- trainControl(## 10-fold CV
+<<<<<<< HEAD
+                           method = "repeatedcv",
+                           number = 10,
+                           ## repeated ten times
+                           repeats = 5,
+                           classProbs = T,
+                           savePredictions = T)
+=======
+  method = "repeatedcv",
+  number = 10,
+  ## repeated ten times
+  repeats = 10)
+>>>>>>> 043a2461f48a7329e3a5ae111acd81fcdfc9b3af
+# Register 4 Processors for parallel optimization
+cl <- makePSOCKcluster(3)
+registerDoParallel(cl)
+# Learn a naive bayes, a logistic regression and a decision tree
+set.seed(1820)
+fit.down.nb <- train(Class ~ ., data = down_train, 
+                     method = "naive_bayes", 
+                     trControl = fitControl)
+fit.up.nb <- train(Class ~ ., data = up_train, 
+                   method = "naive_bayes", 
+                   trControl = fitControl)
+set.seed(1820)
+fit.down.log <- train(Class ~ ., data = down_train, 
+                      method = "regLogistic", 
+                      trControl = fitControl)
+fit.up.log <- train(Class ~ ., data = up_train, 
+                    method = "regLogistic", 
+                    trControl = fitControl)
+set.seed(1820)
+fit.down.tree <- train(Class ~ ., data = down_train, 
+                       method = "ranger", 
+                       trControl = fitControl)
+fit.up.tree <- train(Class ~ ., data = up_train, 
+                     method = "ranger", 
+                     trControl = fitControl)
+
+# Stop parallel execution
+stopCluster(cl)
+
+fitted.down.log <- predict(fit.down.log, newdata = test.scaled, type = "prob")
+fitted.up.log <- predict(fit.up.log, newdata = test.scaled, type = "prob")
+fitted.down.nb <- predict(fit.down.nb, newdata = test.scaled, type = "prob")
+fitted.up.nb <- predict(fit.up.nb, newdata = test.scaled, type = "prob")
+fitted.down.tree <- predict(fit.down.tree, newdata = test.scaled, type = "prob")
+fitted.up.tree <- predict(fit.up.tree, newdata = test.scaled, type = "prob")
+
+library(ggplot2)
+library(plotROC)
+ggplot() %>%
+  + geom_roc(fit.up.log$pred,mapping = aes(m = Yes, d = factor(obs, levels = c("Yes", "No"))), color = "red", hjust = -0.4, vjust = 1.5) %>%
+  + geom_roc(fit.up.nb$pred,mapping = aes(m = Yes, d = factor(obs, levels = c("Yes", "No"))), color = "blue", hjust = -0.4, vjust = 1.5) %>%
+  + geom_roc(fit.up.tree$pred,mapping = aes(m = Yes, d = factor(obs, levels = c("Yes", "No"))), color = "green", hjust = -0.4, vjust = 1.5) %>%
+  + coord_equal()
+```
+
+## Evaluation of models
+
+```{r}
+fitted.down.log$LeadsToBuy <- as.factor(fitted.down.log["TRUE"] >= .5)
+confusionMatrix(data = fitted.down.log$LeadsToBuy, reference = as.factor(test.scaled$LeadsToBuy))
+# twoClassSummary(fitted.down.log, lev = levels(as.factor(c("TRUE","FALSE"))))
+
+# summary(willbuy.logit)
+# anova(willbuy.logit, test="Chisq")
+
+# fitted.results <- ifelse(fitted.results > 0.5,1,0)
+
+# misClasificError <- mean(fitted.results != test$LeadsToBuy)
+# print(paste('Accuracy',1-misClasificError))
+
+library(ROCR)
+pr <- prediction(fitted.down.log, test.scaled$LeadsToBuy)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+auc <- performance(pr, measure = "auc")
+auc
+
+```
+
+
+## Market Basket Analysis
+Analyze session data for click behavior. Products visited together.
+
+```{r prediction, echo=FALSE}
+pred <- ave_Session_df
+pred <- pred %>%
+  subset(select=c(Session_ID, Visited_Products_List))
+```
+```{r}
+library(plyr)
+library(arules)
+library(arulesViz)
+transactionData <- ddply(pred,c("Session_ID"))
+write.csv(transactionData,"market_basket_transactions.csv", quote = FALSE, row.names = FALSE)
+tr <- read.transactions('market_basket_transactions.csv', format = 'basket', sep=',')
+summary(tr)
+if (!require("RColorBrewer")) {
+  # install color package of R
+  install.packages("RColorBrewer")
+  #include library RColorBrewer
+  library(RColorBrewer)
+}
+itemFrequencyPlot(tr,topN=20,type="relative",col=brewer.pal(8,'Pastel2'), main="Absolute Item Frequency Plot")
+association.rules <- apriori(tr, parameter = list(supp=0.0005, conf=0.75,maxlen=5))
+inspect(association.rules)
+plot(association.rules, method = "graph",  engine = "htmlwidget")
+```
+
+
+### Predict Moretimebuyer
+
+```{r moretimebuyer}
+
+
+
+buffer<- order_df %>%
+  select(Order_Customer_ID,Order_ID,Order_Line_ID,
+         Order_Line_Quantity,Product_ID,Order_Date,Order_Promotion_Code,
+         Order_Discount_Amount,Order_Line_Unit_List_Price,Order_Line_Unit_Sale_Price,Order_Amount,
+         Order_Customer_ID,Product,Order_Credit_Card_Payment_Amount,BrandName,Order_Hour_of_Day,Order_Day_of_Week,
+         Order_Credit_Card_Brand,Gender) %>%
+  group_by(Order_Customer_ID,Order_ID,Order_Line_ID)
+
+
+buffer_order <- order_df %>%
+  select(Order_Customer_ID,Order_ID)%>%
+  group_by(Order_Customer_ID) %>%
+  summarise(Orders = length(unique(Order_ID)))
+
+
+buffer <- merge(buffer,buffer_order,by = "Order_Customer_ID")
+
+
+buffer <- buffer %>%
+  select(Order_Customer_ID,Order_ID,Order_Line_ID,Order_Line_Quantity,Product_ID,Order_Date,Order_Promotion_Code,Order_Discount_Amount,Order_Line_Unit_List_Price,
+         Order_Line_Unit_Sale_Price,Order_Amount,Product,Order_Credit_Card_Payment_Amount,BrandName,Order_Hour_of_Day,Order_Day_of_Week,
+         Order_Credit_Card_Brand,Gender,Orders)%>%
+  group_by(Order_ID)%>%
+  summarise(Order_Line_Quantity = first(Order_Line_Quantity),
+            Product_ID = first(Product_ID),
+            Order_Date = first(Order_Date),
+            Order_Promotion_Code = first(Order_Promotion_Code),
+            Order_Discount_Amount = first(Order_Discount_Amount),
+            Order_Line_Unit_List_Price = first(Order_Line_Unit_List_Price),
+            Order_Line_Unit_Sale_Price = first(Order_Line_Unit_Sale_Price),
+            Order_Amount = first(Order_Amount),
+            Product = first(Product),
+            Order_Credit_Card_Payment_Amount = first(Order_Credit_Card_Payment_Amount),
+            BrandName = first(BrandName),
+            Order_Hour_of_Day = first(Order_Hour_of_Day),
+            Order_Day_of_Week = first(Order_Day_of_Week),
+            Order_Credit_Card_Brand = first(Order_Credit_Card_Brand),
+            Gender= first(Gender),
+            Orders = first(Orders))
+
+buffer$moretimebuyer <- c(TRUE)
+
+buffer$moretimebuyer <- replace(buffer$moretimebuyer,buffer$Orders< 2,FALSE)
+
+buffer <-buffer[order(-buffer$moretimebuyer),]
+
+
+buffer <- buffer %>%
+  select(Order_Line_Quantity,Product_ID,Order_Date,Order_Promotion_Code,
+         Order_Discount_Amount,Order_Line_Unit_List_Price,Order_Line_Unit_Sale_Price,Order_Amount,
+         Product,Order_Credit_Card_Payment_Amount,BrandName,Order_Hour_of_Day,Order_Day_of_Week,
+         Order_Credit_Card_Brand,Gender,moretimebuyer)
+
+
+#split T and F and randomize
+
+buffer3 <- filter(buffer,moretimebuyer==TRUE)
+
+buffer3 <- buffer3[sample(nrow(buffer3)),]
+
+buffer4 <- filter(buffer,moretimebuyer==FALSE)
+
+buffer4 <- buffer4[sample(nrow(buffer4)),]
+
+train <- buffer3[1:78,]
+train <- rbind(train,buffer4[1:100,])
+
+test <- buffer3[78:156,]
+test <- rbind(test,buffer4[100:200,])
+
+
+
+library(rpart)
+library(rpart.utils)
+library(rpart.plot)
+
+fit <- rpart(moretimebuyer~
+               Order_Credit_Card_Payment_Amount+Order_Hour_of_Day+Order_Day_of_Week+
+               Order_Credit_Card_Brand+
+               Gender
+             ,data = train,method = "class",
+             control = rpart.control(xval = 10))
+
+rpart.rules(fit)
+
+
+plot(fit, uniform = TRUE,margin = 0.1,main = "O Tree")
+text(fit, use.n = TRUE,all = TRUE,cex=.6)
+prediction <- predict(fit,test,type = "class")
+table(prediction,test$moretimebuyer) 
+
+
+plotcp(fit)
+kable(fit$cptable)
+
+
+# cp 0.06 best performace for minimal False classified as True
+
+# cp 0.04 to 0.56 best performace for minimal True classified as False
+
+fit.pruned <- prune(fit,cp = fit$cptable[which.min(fit$cptable[,"xerror"]),"CP"] )
+
+rpart.rules(fit.pruned)
+
+
+plot(fit.pruned, uniform = TRUE,margin = 0.1, main= "P Tree")
+text(fit.pruned, use.n = TRUE,all = TRUE,cex=.6)
+prediction_p <- predict(fit.pruned,test,type = "class")
+table(prediction_p,test$moretimebuyer) 
+```
+# Conclusion
+>>>>>>> Stashed changes
