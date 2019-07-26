@@ -31,10 +31,11 @@ library(readr)
 
 ```{r dataPaths, echo=FALSE, warning=FALSE, include=FALSE}
 # move datasets to raw_data
-rootDir <- knitr::opts_knit$set("C:/Github/data/")
+rootDir <- knitr::opts_knit$get("root.dir")
 origin_clickstream <- paste(rootDir, "clickstream", sep="")
 origin_experiment <- paste(rootDir,"experiment", sep="")
 origin_orders <- paste(rootDir,"orders", sep="")
+
 des_root <- paste(rootDir, "00_raw_data", sep="")
 des_under <- paste(rootDir, "01_data_understanding", sep="")
 ```
@@ -77,11 +78,8 @@ knitr::opts_chunk$set(echo = FALSE)
 
 # Introduction
 
-This project report is about the webshop of the company ebuy. It is based on two data sources covering the clickstream and the orders of the webshop. Additionally, the company provided us with data of an experiment on recommender systems. From this data, the goal is to find interesting correlations and infer useful predictions. To realize this goal, the data is prepared. <br>
+This project report is about the webshop of the company ebuy. It is based on two data sources covering some clickstream and some order transactions of the webshop. Additionally, the company provided us with data of an experiment on recommender systems. Based on this data, interesting correlations should be found and useful predictions inferred. Hence, the data is prepared.<br>
 First, the data import is described alongside basic information on the data. In this step, the data is also cleaned for further analysis (Chapter [Data Preparation]). Next, the data is summarized and visualized to get an impression on how the data looks like and what could be done with the data (Chapters [Visualisation] and [Summary Statistics]). After that, the prediction models are presented (Chapter [Prediction]). One based on the clickstream and one based in the orders. Finally, the experiment data is evaluated to find the best recommender system (Chapter [Experiment]).
-
-3 Visualization
-
 
 # Data Preparation
 
@@ -89,10 +87,9 @@ This part is rather technical and focuses on showing how the data for analysis i
 
 ## Data Import {#getdata}
 
-Before any visualization or even analysis can take place, the data has to be imported, cleaned and prepared. The import includes the extraction of the zip archives and reading in the data. In the read in process, the different candidates for NULL values are all transformed to a representation of missing data. This includes empty cells, question marks, NULL fields, NA fields and Nan fields. Furthermore, the headers are matched with the data from an external file.
+Before any visualization or even analysis can take place, the data has to be imported, cleaned and prepared. The import includes the extraction of the zip archives and reading in the data. In the read-in process, the different candidates for NULL values are transformed to a representation of missing data. This includes empty cells, question marks, NULL fields, NA fields and Nan fields. Furthermore, the headers are matched with predefined data of a separate file.
 
 ```{r dataImport, echo=FALSE, warning=FALSE, include=FALSE, cache=TRUE}
-
 # prepare column name list
 headersFile = file(headersPath, "r")
 headersFile2 = file(headersPath2, "r")
@@ -115,7 +112,7 @@ click_df <- read_csv(dataPath2, col_names = result2, na=c("", "?", "NULL", "NA",
 click_df2 <- read_csv(dataPath3, col_names = result2, na=c("", "?", "NULL", "NA", "Nan"), guess_max = 20700)
 ```
 
-Initially the data consists of `r length(click_df)` in the clickstream data and `r length(click_df[[1]])` rows in the first dataset. In an additional dataset there are another `r length(click_df2[[1]])` rows. Those two are merged in the next step. </br>
+Initially, the data consists of `r length(click_df)` features in the clickstream data. While the first dataset carried `r length(click_df[[1]])` observations, the second consists of another `r length(click_df2[[1]])`. Those two are merged in the next step. </br>
 In the order dataset, there are `r length(order_df)` columns and `r length(order_df[[1]])` observations.
 
 ```{r mergeClick, cache=TRUE}
@@ -124,8 +121,8 @@ click_df <- rbind(click_df,click_df2)
 
 ## Basic Data Description
 
-Starting off with the clickstream data, it ranges from `r min(click_df$Request_Date)` to `r max(click_df$Request_Date)`. It consists of all individual requests made by people accessing the webshop. So, it contains basic information on the request, meaning which site was requested, when it was requested and some technical information on the request. Apart from that, each observation also contains the session information. That means that there exists a portion of requests that belong to one session of a customer. The session variables save the information where the first request was made. Apart from this metadata, the rows also contain the level the customer currently visits. Whenever a product is visited, the observation in clickstream contains the information on that product, too. </br></br>
-Unfortunately, the order data covers a different timeframe than the clickstream data. Its time range is from `r min(order_df$Order_Date)` to `r max(order_df$Order_Date)`. Apart from the time, order data has a similar structure. Each row is an item contained in an order. This means that it has unique metadata, such as an identifier and which product is selected with which amount. On top of that, there is shared metadata for order items that are bought together in one shopping tour. For the products, similar metadata is given as in the clickstream table. Apart from the data that is directly related to the order, there is also customer related data which describes properties of the customer. For example, there is a column containing the gender of the customer and whether he/she owns a car. Unfortunately, only a fraction of the observation had a good cover on answered customer questions. This made the customer question unsuitable for prediction and statistical analysis. 
+Starting off with the clickstream data, it ranges from `r min(click_df$Request_Date)` to `r max(click_df$Request_Date)`. It consists of all individual requests made by people accessing the webshop. So, it contains basic information on the request, meaning which site was requested, when it was requested and some technical information on the request. Apart from that, each observation also contains the session information. That means that there exists a portion of requests that belong to one session of a customer. The session variables save the information where the first request was made. Next to metadata, the rows also contain the level the customer currently visits. Whenever a product is visited, the observation in clickstream contains information about that product, too. </br></br>
+Unfortunately, the order data covers a different timeframe than the clickstream data. It ranges from `r min(order_df$Order_Date)` to `r max(order_df$Order_Date)`. Further, order data has a similar structure. Each row is an item contained in an order. This means that it has unique metadata, such as an identifier and which product is selected with which amount. On top of that, there is shared metadata for order items that are bought together within one shopping tour. For the products, similar metadata is given in the clickstream table. Apart from the data that is directly related to the order, there is also customer related data which describes properties of the customer. For example, there is a column containing the gender of the customer and whether he/she owns a car. Unfortunately, only a fraction of the observation had a good cover on answered customer questions. This made the customer question unsuitable for prediction and statistical analysis. 
 
 ## Data Cleaning
 ```{r variableConfiguration, cache=TRUE}
@@ -242,7 +239,11 @@ click_df$LeadsToBuy <- click_df$Request_Template == "checkout/thankyou\\.jhtml"
 1. All semicolons within cells are simply erased
 1. Besides, backslashes within cells are erased as well.
 
+<<<<<<< Updated upstream
 In addition to the cleaning tasks, further columns were created. Particularly important is the column LeadsToBuy, that is a boolean column being true whenever a clickstream interaction leads to the buying of products. This is realized by comparing the requested site with a special one that only occurs after a checkout has been completed.
+=======
+In addition to the cleaning tasks, additional columns were created. One particularly important one is the column LeadsToBuy, that is a boolean column being true whenever a clickstream interaction leads to the buying of products. This is realized by comparing the requested site with a special one that only occurs after a checkout has been completed.
+>>>>>>> Stashed changes
 
 ```{r sessionDataframe, cache=TRUE}
 ave_Session_df <- click_df %>%
@@ -338,6 +339,7 @@ boxplot(Order_Amount~Gender, data = order_df, horizontal = TRUE, xlab = "Order A
 Of course, this graph can be misleading, assuming that the male customer spending more than $500 skews the distribution but the information is nice anyways.<br>
 Another valuable information is the location of the customer.
 
+<<<<<<< Updated upstream
 ```{r lorenzkurve_brandvsclicks}
 library(ineq)
 brand_vs_clicks <- click_df %>%
@@ -353,6 +355,41 @@ G <- rep(10,10)
 G_kum <- c(0,cumsum(G/100))
 G1 <- brand_vs_clicks$click_pro
 G1_kum <- c(0,cumsum(brand_vs_clicks$click_pro/100))
+=======
+
+Besides the fact, that the clickstream data and the order data cover different time ranges we compared both datasets. Therefore, we calculate the number of clicks per product from the clickstream dataset and the number of purchases from the order dataset. We compared the distribution of both via a Lorenz curve. Although the result might be compromised by the time gap the Lorenz curve still shows interesting insights about the distribution of clicks and purchases per product. 
+
+```{r lorenzkurve_clicksvspurchases , echo=FALSE, warning=FALSE}
+buffer1 <- click_df %>%
+  select(Product_ID,Session_ID) %>%
+  group_by( Product_ID) %>%
+  summarise(numberofclicks = n())
+
+buffer <- order_df %>%
+  select(Product_ID,Order_Line_Quantity)%>%
+  group_by(Product_ID)%>%
+  summarise(numberofpurchases = sum(Order_Line_Quantity))
+buffer <- filter(buffer,!is.na(numberofpurchases))
+
+product_clicks_purchases <- merge(buffer1,buffer,by="Product_ID",all = TRUE)
+product_clicks_purchases <- filter(product_clicks_purchases,!is.na(numberofclicks))
+product_clicks_purchases <- filter(product_clicks_purchases,!is.na(numberofpurchases))
+product_clicks_purchases <- filter(product_clicks_purchases,!is.na(Product_ID))
+
+totalclicks <- sum(product_clicks_purchases$numberofclicks)
+totalpurchases <- sum(product_clicks_purchases$numberofpurchases)
+
+product_clicks_purchases <- product_clicks_purchases %>%
+  select(Product_ID,numberofclicks,numberofpurchases) %>%
+  group_by(Product_ID)%>%
+  summarise(numberofclicks = numberofclicks,click_perc = numberofclicks/totalclicks,numberofpurchases = numberofpurchases, purchases_perc = numberofpurchases/totalpurchases)
+
+library(ineq)
+G <- rep(10,10)
+G_kum <- c(0,cumsum(G/100))
+G1 <- product_clicks_purchases$purchases_perc
+G1_kum <- c(0,cumsum(product_clicks_purchases$click_perc/100))
+>>>>>>> Stashed changes
 D1 <- Lc(G1, n = rep(1,length(G1)), plot = FALSE)
 p <- D1[1]
 L <- D1[2]
@@ -367,6 +404,7 @@ p1 <- ggplot(data=D1_df) +
   geom_line(aes(x=p, y=L), stat = "identity", color="#990000") +
   geom_polygon(data = koordinaten, aes(x = xx, y = yy), fill = rgb(255,100,0,55,maxColorValue=255)) +
   annotate("text", x = 0.9, y = 0.1, label = paste("Gini =", gini), size=3, colour="gray30") +
+<<<<<<< Updated upstream
   geom_abline()
 p1
 
@@ -375,6 +413,18 @@ p1
 
 ```
 
+=======
+  geom_abline()+
+  labs(y="Number of Purchases per Product",
+       x="Number of Clicks per Product",
+       title = "Product: Clicks vs. Purchases")
+p1
+
+```
+
+The curve illustrates, that the distribution among clicks and purchases are uneven. A handful of products revive most of the clicks but account only a small order amount. On the other hand, products with a high purchase quantity account only small numbers of clicks. It might be, that products, which lead customers to your webshop are not the products these customer purchase.
+
+>>>>>>> Stashed changes
 
 # Summary Statistics
 
@@ -632,8 +682,15 @@ kable(summary_Order)
 
 The table "Summary_Order" is based on `r nrow(ave_Order)` order observations. Here can be seen that most people order the product at least twice, as shown by the order quantity median. Most people also use a promotion, which means that promotions have a large impact on purchases. The negative minimum in the row Order Amount looks suspicious. Research in the data revealed that the orders: order-Id 12314 and order-Id 10930 used a special combination of products and the promotion code FRIEND to generate a negative order amount.  However, the credit card payment amount indicates that the coups did not succeed. Also, the datasets cannot tell if the negative Order Amount were created willingly or through accident.
 
+# Prediction
 
-# Predictions
+## Predict on Clickstream
+
+Using the sesssion dataset, the idea is to predict from the session metadata whether a customer is going to buy something at the end of the session. For that, useful features are selected, namely the session duration, the session day, hour and the referrer. Using this as a basic dataset, there is an issure with the session duration. As mentioned earlier, it is not possible to calculate a session duration for sessions with just one request. For that reason, all entries with only one request are filtered. </br>
+
+From this subset of session data there are `r sum(temp$LeadsToBuy == "Yes")` positive and `r sum(temp$LeadsToBuy == "No")` samples. To cope with the class imbalances, for the models a downsampled version and an upsampled version of the data is created to even out the classes. Then, a logistic regression and a naive bayes classifier are trained on both datasets, the up and downsampled version. To increase generalization performance, 5 repeats of 10-fold cross validation are run. The results for the ROC, the sens and the spec are in the following table.
+
+
 
 ```{r predictionDataset, echo=FALSE, include=FALSE, warning=FALSE}
 #library(rpart)
@@ -742,8 +799,14 @@ trellis.par.set(theme1)
 bwplot(resamp, layout = c(3, 1))
 ```
 
+<<<<<<< Updated upstream
 
 ## Predict Moretimebuyer
+=======
+The table shows that the models with the upsampled dataset outperform the downsampled datasets. The difference between naive bayes and logistic regression is that the sensitivity and the specificity differ quite a bit. The decision which model suits the business context best depends on the business context. The logistic regression offers a higher sensitivity, thus detects the people who want to buy better. On the other hand, the naive bayes model is better at finding those customers that do not want to buy anything. So we have two different good performing models with a similar ROC value for usage on the website.
+
+## Predict on Orders
+>>>>>>> Stashed changes
 To make your company able to improve customer loyalty we build an induction tree model, which separates the b one-time ordering customersb  from b more time ordering customersb . The underlaying assumption is that b more time buyersb  are more value. We used a tree model since, compared with other models the findings can be communicated low-tech within our company. The rules separating the customers can be looked up at the induction tree graphic. The prediction model and the findings enable your company to target those customers which are more likely place a second order. This leads to a better marketing fund utilization and a stronger customer loyalty.
 
 ```{r unloadplyr, warning=FALSE, include=FALSE}
@@ -754,7 +817,11 @@ detach("package:plyr",unload = TRUE)
 
 ```
 
+<<<<<<< Updated upstream
 ```{r moretimebuyer_prepare, echo=FALSE,warning=FALSE}
+=======
+```{r moretimebuyer_prepare, echo=FALSE,warning=FALSE , cache=FALSE}
+>>>>>>> Stashed changes
 
 buffer<- order_df %>%
   select(Order_Customer_ID,Order_ID,Order_Line_ID,
@@ -830,7 +897,11 @@ trainset <- totalset[1:(nrow(totalset)*0.8),]
 testset <- totalset[(nrow(totalset)*0.2):nrow(totalset),]
 ```
 
+<<<<<<< Updated upstream
 In order to train the decision tree, we created a dataset out of the order dataset, which only includes the first orders of all customers and a label if the order was followed by at least one another order. This dataset contains `r nrow(buffer)` first order observations of which, `r nrow(buffer3)` observations are b more time buyersb  and `r nrow(buffer4)` observations are b one time buyersb .
+=======
+In order to train the decision tree, we created a dataset out of the order dataset, which only includes the first orders of all customers and a label if the order was followed by at least one another order. This dataset contains `r nrow(buffer)` first order observations of which, `r nrow(buffer3)` observations are more time buyers and `r nrow(buffer4)` observations are one time buyers.
+>>>>>>> Stashed changes
 
 ```{r moretimebuyer_firstmodel ,echo=FALSE,warning=FALSE}
 #build first model and show tree
@@ -840,7 +911,11 @@ fit <- rpart(moretimebuyer~.
 rpart.plot(fit,type = 1,extra = "auto")
 ```
 
+<<<<<<< Updated upstream
 The first tree indicates, that the credit card payment amount is a strong indicator for the prediction b more time buyerb  true or false. The splitting rule, the classification, the probability of classification, and the percentage of entities at are point are listed at each splitting point. A probability under 0.5 means the prediction is b one-time buyerb  and a probability over 0.5 means the model predicts b more time buyerb .  The tree is obviously not suitable for communication within our company due to the complexity. Also, the tree is likely to be overfitted to the training dataset.  
+=======
+The first tree indicates, that the credit card payment amount is a strong indicator for the prediction more time buyer true or false. The splitting rule, the classification, the probability of classification, and the percentage of entities at are point are listed at each splitting point. A probability under 0.5 means the prediction is one-time buyer and a probability over 0.5 means the model predicts more time buyer.  The tree is obviously not suitable for communication within our company due to the complexity. Also, the tree is likely to be overfitted to the training dataset.  
+>>>>>>> Stashed changes
 
 ```{r moretimebuyer_firstmodel_testresults,echo=FALSE,warning=FALSE}
 #show testset results
@@ -852,7 +927,11 @@ names(prediction)[2] <- "True_probability"
 kable(head(prediction))
 ```
 
+<<<<<<< Updated upstream
 The table above is a sample of the prediction results and the testdata set. The first two columns list the instances probability to be b one-time buyerb  as False probability and b more time buyerb  as TRUE probability. The third and fourth columns list the actual label and the credit card payment amount of each instance.   
+=======
+The table above is a sample of the prediction results and the testdata set. The first two columns list the instances probability to be one-time buyer as False probability and more time buyer as TRUE probability. The third and fourth columns list the actual label and the credit card payment amount of each instance.   
+>>>>>>> Stashed changes
 
 ```{r moretimebuyer_firstmodel_cm ,echo=FALSE,warning=FALSE}
 # show confusion matrix 
@@ -865,23 +944,48 @@ kable(modelaccuracy,col.names = "model accuracy",label = NA )
 kable(table(Confusion_matrix,testset$moretimebuyer),caption = "Confusion_matrix",label = NA)
 ```
 
+<<<<<<< Updated upstream
 In order to evaluate the model, we use the overall accuracy and a confusion matrix. Despite the complexity the first tree is doing a fair prediction on the testdata set, but the model is far better in identifying b one-time buyerb  than b more time buyerb . The likely cause for this is the small amount of b more time buyerb  observations in the training set. Still the model is doing a far better job than random guessing, where the accuracy would be around 50%.
+=======
+In order to evaluate the model, we use the overall accuracy and a confusion matrix. Despite the complexity the first tree is doing a fair prediction on the testdata set, but the model is far better in identifying one-time buyer than more time buyer. The likely cause for this is the small amount of more time buyer observations in the training set. Still the model is doing a far better job than random guessing, where the accuracy would be around 50%.
+>>>>>>> Stashed changes
 
 ```{r moretimebuyer_firstmodel_fit,echo=FALSE,warning=FALSE}
 plotcp(fit)
 kable(fit$cptable)
 ```
 
+<<<<<<< Updated upstream
 In order to avoid overfitting, the cross-validation error from the first tree is used to build a second tree. The graph shows the cross-validation error vs. the model complexity. The complexity of the minimal cross-validation error is used to prune the second tree. 
  
 ```{r secoundtree,echo=FALSE,warning=FALSE}
 # build secound tree
 fit.pruned <- prune(fit,cp = fit$cptable[which.min(fit$cptable[,"xerror"]),"CP"] )
+=======
+In order to avoid overfitting, the cross-validation error from the first tree is used to build a second tree. The graph shows the cross-validation error vs. the model complexity. The cross-validation error is used to find the optimal complexity and this complexity is used to prune the second tree.
+ 
+```{r secoundtree,echo=FALSE,warning=FALSE}
+# build secound tree
+cp = fit$cptable[which.min(fit$cptable[,"xerror"]),"CP"]
+lastcp = fit$cptable[which.min(fit$cptable[,"CP"]),"CP"]
+
+if (cp == lastcp) {
+  cp = fit$cptable[nrow(fit$cptable)-1,"CP"]
+}
+
+
+
+fit.pruned <- prune(fit,cp = cp ,control = rpart.control(xval = 10,minbucket = 6))
+>>>>>>> Stashed changes
 rpart.plot(fit.pruned,type = 1,extra = "auto")
 
 ```
 
+<<<<<<< Updated upstream
 The second tree is less complex then the first one. Like before the splitting rule, the classification, the probability of classification, and the percentage of entities at a point are shown for each splitting point. Also, a probability under 0.5 means the prediction is b one-time buyerb  and a probability over 0.5 means the model predicts b more time buyerb . The main benefit of the second tree is the simplification, which makes it easier to communicate findings and to use them as a competitive advantage in sale campaigns and in marketing campaigns.
+=======
+The second tree is less complex then the first one. Like before the splitting rule, the classification, the probability of classification, and the percentage of entities at a point are shown for each splitting point. Also, a probability under 0.5 means the prediction is one-time buyer and a probability over 0.5 means the model predicts more time buyer. The main benefit of the second tree is the simplification, which makes it easier to communicate findings and to use them as a competitive advantage in sale campaigns and in marketing campaigns.
+>>>>>>> Stashed changes
 
 ```{r moretimebuyer_secoundmodel_cm ,echo=FALSE,warning=FALSE}
 # show confusion matrix 
@@ -903,19 +1007,35 @@ prediction <- as.data.frame(predict(fit,testset,type = "prob"))
 prediction[,3:3] <- testset[,13:13]
 prediction[,4:4] <- testset[,8:8]
 prediction[,5:5] <- testset[,10:10]
+<<<<<<< Updated upstream
 prediction[,5:5] <- testset[,11:11]
 names(prediction)[1] <- "False_probability"
 names(prediction)[2] <- "True_probability"
 
 result <- filter(prediction, True_probability>0.6)
+=======
+prediction[,6:6] <- testset[,11:11]
+names(prediction)[1] <- "False_probability"
+names(prediction)[2] <- "True_probability"
+
+result <- filter(prediction, True_probability>0.8)
+>>>>>>> Stashed changes
 
 kable(result)
 
 ```
 
+<<<<<<< Updated upstream
 One way to mine the result of the prediction tree would be to rank the instances by the b True probabilityb  and target the instances over a certain threshold. Like in the table above with a threshold of 0.6%. Another approach is to train customer support personnel, sales personnel, and marketing personnel with the second induction tree model to give them a better understanding of profitable customers. This will enable our employees to target these customers directly. Both suggested methods can be applied by itself or together.
 
 ## Experiment: Recommender Systems
+=======
+
+One way to mine the result of the prediction tree would be to rank the instances by the b True probabilityb  and target the instances over a certain threshold. Like in the table above with a threshold of 0.8 True_probability. Another approach is to train customer support personnel, sales personnel, and marketing personnel with the second induction tree model to give them a better understanding of profitable customers. This will enable our employees to target these customers directly. Both suggested methods can be applied by itself or together.
+
+## Experiment
+  Recommender Systems
+>>>>>>> Stashed changes
 
 For the websites recommender systems, there are different options. In an experiment, three different recommender systems were tested. First a random recommendation system as baseline comparison for the experiment, second a ranking based recommender system and third a profit-oriented recommender system. The data consisted of 146 observations for the profit-oriented system, 149 for the random one and 154 observations for the ranking based system.
 
@@ -946,3 +1066,11 @@ profRkg <- t.test(experiment$profit_oriented, experiment$ranking_based, alternat
 The t-test shows that the profit-oriented recommender system is indeed significantly better than the random recommendation system, with a p value of {variable}. Furthermore, it performs also significantly better than the ranking based recommender system, making it the best of the three. Our conclusion is that the best system to use is the profit-oriented recommender system, because it is able to outperform the other candidate statistically significantly.
 
 # Conclusion
+<<<<<<< Updated upstream
+=======
+
+To conclude, we first summarize the most interesting findings in your data. First most orders were placed on the 1st of march. At this week beginning at the 28th of February also 56% of all order were made. Another finding regarding order amount is that men seem to have a higher order amount than women on average. In addition to that the highest order amount was also placed by a man, but women have by more outlier in terms of order amount. A third finding is that clicks and purchases are distributed unevenly over our products. It could be that products with high amounts of clicks promote the products with a high amount of purchase. Interesting findings in the clickstream dataset are that your top referrer is www.gazelle.com. Another is that the product with the highest number of clicks it Cellulite Trimming Gel, but the number of clicks is distributed mostly evenly over your top 5 products. The favorite hour for clicks on your webshop is 2 am and most clicks are placed over the weekend. The average session indicates that most visitors only look at one site of your webshop and one product. The summary of the order dataset shows that the most ordered product is the product with the ID 12883. Unfortunately, the names for all top 5 products are missing. Fortunately, most of the orders include brand names. The best-selling brand is AME far with 822 purchases. In contrast to the top click days the top days for orders are mostly weekdays. In terms of orders Wednesday is leading with 934 orders. In the average order the most interesting finding is the negative order amount. Research in the data revealed that the orders: order-Id 12314 and order-Id 10930 used a special combination of products and the promotion code FRIEND to generate a negative order amount. Further investigation is recommended here. Anyway, the average credit card payment amount indicates that the coups did not succeed.
+
+Though the prediction we discovered that one strong indicator separating one-time buyers from the more time buyers is the Credit Card Payment Amount. This discovered rule and the other rules are shown in the prediction tree. The rules can be used to gain a competitive advantage. One way to do so is to use the prediction model on order of new customers. Another is to train your employees with the tree so they can target customers, which are more likely to do another order. The accuracy of the tree can be improved with additional observations of more time buyers first orders. The evaluation of the Recommender Systems shows that the profit orientated recommender system performed best out of the three Random, Ranking and Profit orientated.
+
+>>>>>>> Stashed changes
